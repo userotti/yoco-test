@@ -1,0 +1,245 @@
+<html>
+<head>
+    <script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.2.1.min.js"></script>
+</head>
+<body>
+
+    <button id="fetch" style="padding: 20px;"> Fetch Test Data </button>
+
+    <script type="application/javascript">
+
+    //Tried setting the Access-Control-Allow-Origin header, but no luck getting data from the bucket
+    function performSignIn() {
+
+        let headers = new Headers();
+        headers.append('Content-Type', 'application/json');
+        headers.append('Accept', 'application/json');
+        headers.append('Access-Control-Allow-Origin', 'http://localhost:8000');
+        headers.append('Access-Control-Allow-Credentials', 'true');
+        headers.append('GET', 'POST', 'OPTIONS');
+        return headers;
+
+    }
+
+
+    //I could not reach the s3 bucket, not sure if it was part of the test to find a way around it. :/
+    $('#fetch').click(function(){
+
+        var headers = performSignIn();
+        fetch("tests.json", {
+            credentials: 'include',
+            method: 'GET',
+            headers: headers,
+            mode: 'no-cors'
+        })
+        .then(response => response.json())
+        .then(json => processResponse(json))
+
+    })
+
+    //Process the data from the request
+    function processResponse(jsonData) {
+
+        var gamesArray = jsonData;
+        for(let i = 0; i < gamesArray.length; i++){
+
+            whoWonThisGame(gamesArray[i]);
+
+        }
+
+    }
+
+    //Determine the winner of a given game.
+    function whoWonThisGame(game) {
+        var playerAHand = game.playerA;
+        var playerBHand = game.playerB;
+
+        // Some formating adone on the data to make it easier to compare the hands.
+        var formatedHandA = formatHand(playerAHand);
+        var formatedHandB = formatHand(playerBHand);
+
+        console.log(" ------- " + playerAHand + " ---VS---" + playerBHand +  " ------- ");
+
+        var winner = compareHands(formatedHandA,formatedHandB)
+        if (game.playerAWins){
+            if (winner === formatedHandA){
+                console.log("success! Player A did win!!");
+            } else {
+                console.log("wrong!!!!! Player B won!!");
+            }
+        } else {
+            if (winner === formatedHandB){
+                console.log("success! Player B did win!!");
+            } else {
+                console.log("wrong!!!!! Player B won!!");
+            }
+        };
+
+    }
+
+    //Compare the 2 hands in a game
+    function compareHands(hand1, hand2){
+        if (hand1.totalPoints > 21){
+            return hand2;
+        }
+        if (hand2.totalPoints > 21){
+            return hand1;
+        }
+
+        if (hand1.totalPoints > hand2.totalPoints){
+            return hand1
+        } else {
+            if (hand2.totalPoints > hand1.totalPoints){
+                return hand2
+            } else {
+                return compareOnCards(hand1, hand2);
+            }
+        }
+    }
+
+    //Compare hands on a card level
+    function compareOnCards(hand1, hand2){
+        l1 = hand1.cards.length;
+        l2 = hand2.cards.length;
+
+        length = Math.max(hand1.cards.length, hand2.cards.length);
+
+        //compare on main points
+        for(let i = 0; i < length; i++){
+            if (hand1.cards[i].gamePoints - hand2.cards[i].gamePoints > 1000000){
+                return hand1
+            }
+
+            if (hand2.cards[i].gamePoints - hand1.cards[i].gamePoints > 1000000){
+                return hand2
+            }
+        }
+
+        //compare on face card types
+        for(let i = 0; i < length; i++){
+            if (hand1.cards[i].gamePoints - hand2.cards[i].gamePoints > 1000){
+                return hand1
+            }
+
+            if (hand2.cards[i].gamePoints - hand1.cards[i].gamePoints > 1000){
+                return hand2
+            }
+        }
+
+        //compare on suits
+        for(let i = 0; i < length; i++){
+            if (hand1.cards[i].gamePoints - hand2.cards[i].gamePoints > 0){
+                return hand1
+            }
+
+            if (hand2.cards[i].gamePoints - hand1.cards[i].gamePoints > 0){
+                return hand2
+            }
+        }
+
+        //this should not happen
+        return null
+
+    }
+
+    //Format the hand so that it is easy to work with it
+    function formatHand(hand){
+        let numberString
+        let suitString
+
+        var formatedHand = {}
+        formatedHand.cards = hand.map((card)=>{
+
+            var newCard = {
+                rawcard: card,
+                suit: card.substr(card.length-1, 1),
+                type: card.substring(0, card.length-1),
+                points: getPointsFromCardType(card.substring(0, card.length-1))
+            }
+
+            return getCardWithGamePoints(Object.assign({},newCard))
+
+        })
+
+        formatedHand.totalPoints = countPointsInHand(formatedHand.cards);
+        bubbleSortFormatedHand(formatedHand.cards);
+        formatedHand.cards.reverse();
+        return formatedHand;
+
+    }
+
+    //Get the point of a card from looking at the type
+    function getPointsFromCardType(cardType){
+
+        if (cardType == "A"){
+            return 11;
+        } else if (isNaN(Number(cardType))) {
+            return 10;
+        } else {
+            return Number(cardType)
+        }
+    }
+
+    //Return a card with the gamePoint attribute calculated
+    function getCardWithGamePoints(card){
+
+        currentGamePoints = card.points * 1000000;
+        switch (card.type){
+            case "K":
+                currentGamePoints = currentGamePoints + 75 * 1000;
+            break;
+            case "Q":
+                currentGamePoints = currentGamePoints + 50 * 1000;
+            break;
+            case "J":
+                currentGamePoints = currentGamePoints + 25 * 1000;
+            break;
+        }
+
+        switch (card.suit){
+            case "S":
+                currentGamePoints = currentGamePoints + 4;
+            break;
+            case "H":
+                currentGamePoints = currentGamePoints + 3;
+            break;
+            case "C":
+                currentGamePoints = currentGamePoints + 2;
+            break;
+            case "D":
+                currentGamePoints = currentGamePoints + 1;
+            break;
+        }
+
+        card.gamePoints = currentGamePoints;
+        return card;
+
+    }
+
+    //Count the point in a given formated hand
+    function countPointsInHand(formatedHand) {
+        return formatedHand.map(card => card.points).reduce((accumulator, points)=>{
+            return accumulator + points;
+        })
+    }
+
+    //Sort cards by gamePoints
+    function bubbleSortFormatedHand(hand) {
+      var length = hand.length;
+      for (var i = 0; i < length; i++) { //Number of passes
+        for (var j = 0; j < (length - i - 1); j++) { //Notice that j < (length - i)
+          //Compare the adjacent positions
+          if(hand[j].gamePoints > hand[j+1].gamePoints) {
+            //Swap the numbers
+            var tmp = hand[j];  //Temporary variable to hold the current number
+            hand[j] = hand[j+1]; //Replace current number with adjacent number
+            hand[j+1] = tmp; //Replace adjacent number with current number
+          }
+        }
+      }
+    }
+
+    </script>
+
+</body>
+</html>
